@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+<title>Animal GPS</title>
+
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.css" rel="stylesheet"/>
+
+<style>
+
+*{
+  box-sizing:border-box;
+}
+
+body{
+  margin:0;
+  display:flex;
+  font-family:Arial;
+  height:100vh;
+  overflow:hidden;
+  background:#111;
+}
+
+/* ================= SIDEBAR ================= */
+
+#sidebar{
+  width:280px;
+  background:#1b1b1b;
+  color:white;
+  padding:15px;
+  overflow-y:auto;
+  border-right:1px solid #2b2b2b;
+}
+
+#sidebar h2{
+  margin-top:0;
+  margin-bottom:14px;
+  font-size:24px;
+  text-align:center;
+}
+
+.section-title{
+  text-align:center;
+  font-size:11px;
+  color:#999;
+  margin:10px 0 4px 0;
+  letter-spacing:2px;
+  text-transform:uppercase;
+}
+
+.divider{
+  width:100%;
+  height:1px;
+  background:#3a3a3a;
+  margin-bottom:8px;
+  border-radius:10px;
+}
+
+#sidebar button{
+  width:100%;
+  margin:5px 0;
+  padding:11px;
+  border:none;
+  border-radius:10px;
+  background:#2f2f2f;
+  color:white;
+  cursor:pointer;
+  font-size:15px;
+  transition:0.2s;
+}
+
+#sidebar button:hover{
+  background:#3c3c3c;
+}
+
+#info{
+  margin-top:12px;
+  font-size:14px;
+  text-align:center;
+  background:#222;
+  padding:10px;
+  border-radius:10px;
+  line-height:1.4;
+}
+
+.delete-btn{
+  background:#c62828 !important;
+}
+
+/* ================= MAP ================= */
+
+#map{
+  flex:1;
+  height:100vh;
+}
+
+.map-controls{
+  position:absolute;
+  right:12px;
+  top:12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  z-index:10;
+}
+
+.map-controls button{
+  width:44px;
+  height:44px;
+  border:none;
+  border-radius:10px;
+  background:white;
+  cursor:pointer;
+  font-size:18px;
+  box-shadow:0 2px 10px rgba(0,0,0,0.3);
+}
+
+/* ================= MOBILE ================= */
+
+@media (max-width:768px){
+
+  body{
+    flex-direction:column;
+    height:100dvh;
+    overflow:hidden;
+  }
+
+  #sidebar{
+    width:100%;
+    padding:8px;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:6px;
+    flex-shrink:0;
+    overflow:visible;
+    border-right:none;
+    border-bottom:1px solid #2b2b2b;
+  }
+
+  #sidebar h2{
+    grid-column:1 / 3;
+    margin:0 0 5px 0;
+    font-size:17px;
+    text-align:center;
+  }
+
+  .section-title{
+    grid-column:1 / 3;
+    margin:5px 0 0 0;
+    font-size:10px;
+  }
+
+  .divider{
+    grid-column:1 / 3;
+  }
+
+  #sidebar button{
+    margin:0;
+    padding:8px;
+    font-size:12px;
+    border-radius:7px;
+  }
+
+  #info{
+    grid-column:1 / 3;
+    margin-top:4px;
+    font-size:11px;
+    padding:8px;
+  }
+
+  #map{
+    flex:1;
+    width:100%;
+    min-height:0;
+  }
+
+  .map-controls{
+    bottom:10px;
+    right:10px;
+    top:auto;
+    gap:6px;
+  }
+
+  .map-controls button{
+    width:40px;
+    height:40px;
+    font-size:16px;
+  }
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div id="sidebar">
+
+  <h2>Animal GPS</h2>
+
+  <h6 class="section-title">ЖИВОТНЫЕ</h6>
+  <div class="divider"></div>
+
+  <button onclick="addAnimal('Лошадь')">🐎 Лошадь</button>
+  <button onclick="addAnimal('Корова')">🐄 Корова</button>
+  <button onclick="addAnimal('Олень')">🦌 Олень</button>
+  <button onclick="addAnimal('Верблюд')">🐫 Верблюд</button>
+
+  <h6 class="section-title">ТЕМА КАРТЫ</h6>
+  <div class="divider"></div>
+
+  <button onclick="setDark()">🌙 Тёмная</button>
+  <button onclick="setLight()">☀ Светлая</button>
+
+  <div id="info">
+    Выберите животное
+  </div>
+
+</div>
+
+<div id="map"></div>
+
+<div class="map-controls">
+  <button onclick="zoomIn()">+</button>
+  <button onclick="zoomOut()">−</button>
+  <button onclick="goToMe()">📍</button>
+</div>
+
+<script>
+
+// ================= MAPBOX =================
+
+mapboxgl.accessToken =
+'pk.eyJ1IjoiZGFyeW4xIiwiYSI6ImNtcGR2ZzZ4ajBoYmUydHIyaG5pd2o4cTgifQ.mo3pO5tFlskUY9gUbAdlyw';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCbCbrteNzHxtkMrXtt9jWWYsaN7hP1JiU",
+  authDomain: "gps-animals.firebaseapp.com",
+  databaseURL: "https://gps-animals-default-rtdb.firebaseio.com",
+  projectId: "gps-animals",
+  storageBucket: "gps-animals.firebasestorage.app",
+  messagingSenderId: "58735998155",
+  appId: "1:58735998155:web:2b3a84dfcfd1e559dd574e",
+  measurementId: "G-D17DTKXKZN"
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.database();
+
+// ================= MAP =================
+
+const map = new mapboxgl.Map({
+  container:'map',
+  style:'mapbox://styles/mapbox/dark-v11',
+  center:[57.166,50.283],
+  zoom:5
+});
+
+// ================= DATA =================
+
+let tempMarker = null;
+let userMarker;
+
+let markers = [];
+let firebaseMarkers = {};
+
+let dangerReady = false;
+
+let lastLng = null;
+let lastLat = null;
+
+// ================= READY =================
+
+map.on('load',()=>{
+
+  dangerReady = true;
+
+  checkDangerZones();
+
+});
+
+// ================= TIME =================
+
+function getTime(){
+
+  const now = new Date();
+
+  return{
+    raw:now.getTime(),
+    pretty:now.toLocaleString('ru-RU')
+  };
+
+}
+
+// ================= GPS =================
+
+navigator.geolocation.watchPosition(pos=>{
+
+  const lng = pos.coords.longitude;
+  const lat = pos.coords.latitude;
+
+  lastLng = lng;
+  lastLat = lat;
+
+  if(!userMarker){
+
+    userMarker = new mapboxgl.Marker({
+      color:'blue'
+    })
+    .setLngLat([lng,lat])
+    .addTo(map);
+
+    map.setCenter([lng,lat]);
+    map.setZoom(13);
+
+  }else{
+
+    userMarker.setLngLat([lng,lat]);
+
+  }
+
+});
+
+// ================= ICON =================
+
+function getIcon(type){
+
+  if(type==='Лошадь') return '🐎';
+  if(type==='Корова') return '🐄';
+  if(type==='Олень') return '🦌';
+  if(type==='Верблюд') return '🐫';
+
+  return '📍';
+
+}
+
+// ================= ADD =================
+
+function addAnimal(type){
+
+  if(tempMarker){
+    tempMarker.remove();
+  }
+
+  const center = map.getCenter();
+
+  tempMarker = new mapboxgl.Marker({
+    draggable:true
+  })
+  .setLngLat(center)
+  .addTo(map);
+
+  document.getElementById('info').innerHTML = `
+
+    Перетащите метку<br><br>
+
+    <button onclick="confirmAnimal('${type}')">
+      ✔ Подтвердить
+    </button>
+
+  `;
+
+}
+
+// ================= CONFIRM =================
+
+function confirmAnimal(type){
+
+  if(!tempMarker) return;
+
+  const pos = tempMarker.getLngLat();
+
+  const time = getTime();
+
+  db.ref("markers").push({
+
+    lng:pos.lng,
+    lat:pos.lat,
+
+    type:type,
+
+    timePretty:time.pretty,
+    timeRaw:time.raw,
+
+    likes:0,
+    dislikes:0
+
+  });
+
+  tempMarker.remove();
+
+  tempMarker = null;
+
+  document.getElementById('info').innerHTML = `
+
+    <div style="
+      background:#1f3520;
+      color:#8cff98;
+      padding:10px;
+      border-radius:10px;
+    ">
+      ✅ Метка добавлена
+    </div>
+
+  `;
+
+}
+
+// ================= LOAD =================
+
+db.ref("markers").on("child_added",(snapshot)=>{
+
+  const id = snapshot.key;
+  const data = snapshot.val();
+
+  if(firebaseMarkers[id]) return;
+
+  const el = document.createElement('div');
+
+  el.style.fontSize = '24px';
+
+  el.innerHTML = getIcon(data.type);
+
+  const marker = new mapboxgl.Marker(el)
+    .setLngLat([data.lng,data.lat])
+    .addTo(map);
+
+  const markerData = {
+
+    id:id,
+    marker:marker,
+
+    lng:data.lng,
+    lat:data.lat,
+
+    type:data.type,
+
+    timePretty:data.timePretty,
+
+    likes:data.likes || 0,
+    dislikes:data.dislikes || 0
+
+  };
+
+  firebaseMarkers[id] = markerData;
+
+  markers.push(markerData);
+
+  marker.getElement().addEventListener('click',()=>{
+
+    openPanel(markerData);
+
+  });
+
+  checkDangerZones();
+
+});
+
+// ================= REMOVE =================
+
+db.ref("markers").on("child_removed",(snapshot)=>{
+
+  const id = snapshot.key;
+
+  if(!firebaseMarkers[id]) return;
+
+  firebaseMarkers[id].marker.remove();
+
+  markers = markers.filter(m => m.id !== id);
+
+  delete firebaseMarkers[id];
+
+  document.getElementById('info').innerHTML = `
+
+    <div style="
+      background:#2b1b1b;
+      color:#ff8a8a;
+      padding:10px;
+      border-radius:10px;
+    ">
+      🗑 Метка удалена
+    </div>
+
+  `;
+
+  checkDangerZones();
+
+});
+
+// ================= PANEL =================
+
+function openPanel(data){
+
+  document.getElementById('info').innerHTML = `
+
+    <b>${data.type}</b><br>
+
+    🕒 ${data.timePretty}<br><br>
+
+    👍 ${data.likes}
+    |
+    👎 ${data.dislikes}
+
+    <br><br>
+
+    <button onclick="likeMarker('${data.id}')">
+      👍 Есть
+    </button>
+
+    <button onclick="dislikeMarker('${data.id}')">
+      👎 Нет
+    </button>
+
+    <button class="delete-btn"
+      onclick="deleteMarker('${data.id}')">
+
+      🗑 Удалить
+
+    </button>
+
+  `;
+
+}
+
+// ================= DELETE =================
+
+function deleteMarker(id){
+
+  db.ref("markers/" + id).remove()
+  .catch((error)=>{
+
+    console.log(error);
+
+    document.getElementById('info').innerHTML = `
+
+      <div style="
+        background:#3a1f1f;
+        color:#ff9b9b;
+        padding:10px;
+        border-radius:10px;
+      ">
+        ❌ Ошибка удаления
+      </div>
+
+    `;
+
+  });
+
+}
+
+// ================= LIKE =================
+
+function likeMarker(id){
+
+  const item = firebaseMarkers[id];
+
+  if(!item) return;
+
+  item.likes++;
+
+  db.ref("markers/" + id).update({
+
+    likes:item.likes
+
+  });
+
+  openPanel(item);
+
+}
+
+// ================= DISLIKE =================
+
+function dislikeMarker(id){
+
+  const item = firebaseMarkers[id];
+
+  if(!item) return;
+
+  item.dislikes++;
+
+  if(item.dislikes >= 2){
+
+    db.ref("markers/" + id).remove();
+
+  }else{
+
+    db.ref("markers/" + id).update({
+
+      dislikes:item.dislikes
+
+    });
+
+    openPanel(item);
+
+  }
+
+}
+
+// ================= DISTANCE =================
+
+function distance(lng1,lat1,lng2,lat2){
+
+  const R = 6371000;
+
+  const dLat = (lat2-lat1) * Math.PI/180;
+  const dLng = (lng2-lng1) * Math.PI/180;
+
+  const a =
+
+    Math.sin(dLat/2)**2 +
+
+    Math.cos(lat1*Math.PI/180) *
+    Math.cos(lat2*Math.PI/180) *
+
+    Math.sin(dLng/2)**2;
+
+  return R * (
+    2 * Math.atan2(
+      Math.sqrt(a),
+      Math.sqrt(1-a)
+    )
+  );
+
+}
+
+// ================= CIRCLE =================
+
+function createGeoCircle(center,radius){
+
+  const coords = [];
+
+  const earth = 6371000;
+
+  const [lng,lat] = center;
+
+  for(let i=0;i<=64;i++){
+
+    const angle = (i*360)/64;
+
+    const rad = angle * Math.PI/180;
+
+    const dx = radius * Math.cos(rad);
+    const dy = radius * Math.sin(rad);
+
+    const newLat =
+      lat + (dy/earth) * (180/Math.PI);
+
+    const newLng =
+      lng + (
+        dx /
+        (earth * Math.cos(Math.PI * lat / 180))
+      ) * (180/Math.PI);
+
+    coords.push([newLng,newLat]);
+
+  }
+
+  coords.push(coords[0]);
+
+  return{
+
+    type:"Feature",
+
+    geometry:{
+      type:"Polygon",
+      coordinates:[coords]
+    }
+
+  };
+
+}
+
+// ================= DANGER =================
+
+function checkDangerZones(){
+
+  if(!dangerReady) return;
+
+  const zones = [];
+
+  for(let i=0;i<markers.length;i++){
+
+    let count = 0;
+
+    for(let j=0;j<markers.length;j++){
+
+      const d = distance(
+
+        markers[i].lng,
+        markers[i].lat,
+
+        markers[j].lng,
+        markers[j].lat
+
+      );
+
+      if(d < 500){
+        count++;
+      }
+
+    }
+
+    if(count >= 3){
+
+      zones.push(
+
+        createGeoCircle(
+          [markers[i].lng,markers[i].lat],
+          500
+        )
+
+      );
+
+    }
+
+  }
+
+  if(map.getLayer("danger-layer")){
+    map.removeLayer("danger-layer");
+  }
+
+  if(map.getSource("danger")){
+    map.removeSource("danger");
+  }
+
+  map.addSource("danger",{
+
+    type:"geojson",
+
+    data:{
+      type:"FeatureCollection",
+      features:zones
+    }
+
+  });
+
+  map.addLayer({
+
+    id:"danger-layer",
+
+    type:"fill",
+
+    source:"danger",
+
+    paint:{
+      "fill-color":"red",
+      "fill-opacity":0.25,
+      "fill-outline-color":"red"
+    }
+
+  });
+
+}
+
+// ================= CONTROLS =================
+
+function zoomIn(){
+  map.zoomIn();
+}
+
+function zoomOut(){
+  map.zoomOut();
+}
+
+// ================= LOCATION =================
+
+function goToMe(){
+
+  if(lastLng !== null && lastLat !== null){
+
+    map.flyTo({
+
+      center:[lastLng,lastLat],
+      zoom:16,
+      essential:true
+
+    });
+
+  }
+
+}
+
+// ================= THEMES =================
+
+function setDark(){
+
+  map.setStyle(
+    "mapbox://styles/mapbox/dark-v11"
+  );
+
+  map.once('style.load',()=>{
+
+    dangerReady = true;
+
+    checkDangerZones();
+
+  });
+
+}
+
+function setLight(){
+
+  map.setStyle(
+    "mapbox://styles/mapbox/light-v11"
+  );
+
+  map.once('style.load',()=>{
+
+    dangerReady = true;
+
+    checkDangerZones();
+
+  });
+
+}
+
+</script>
+
+</body>
+</html>
